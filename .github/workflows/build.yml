@@ -1,0 +1,59 @@
+name: Build Multilingual AI TTS APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Run App Setup Script
+        run: |
+          if [ -f "Setup.sh" ]; then mv Setup.sh setup.sh; fi
+          chmod +x setup.sh
+          ./setup.sh
+          gradle wrapper --gradle-version 8.5
+
+      - name: Download Offline AI Models (Gujarati, Hindi, Sanskrit, English)
+        run: |
+          mkdir -p app/src/main/assets/models
+          cd app/src/main/assets/models
+          
+          # Gujarati (Meta MMS-TTS)
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2
+          tar -xjf vits-mms-guj.tar.bz2 && rm vits-mms-guj.tar.bz2
+          
+          # Sanskrit (Meta MMS-TTS)
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2
+          tar -xjf vits-mms-san.tar.bz2 && rm vits-mms-san.tar.bz2
+          
+          # Hindi (Piper AI Voice)
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2
+          tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
+          
+          # English (Piper AI Voice)
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2
+          tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
+
+      - name: Build Debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Ready APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multilingual-AI-TTS-App
+          path: app/build/outputs/apk/debug/app-debug.apk
