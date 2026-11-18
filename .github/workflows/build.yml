@@ -16,9 +16,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Run App Setup Script
         run: |
           if [ -f "Setup.sh" ]; then mv Setup.sh setup.sh; fi
