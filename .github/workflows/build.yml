@@ -29,20 +29,16 @@ jobs:
           cd app/src/main/assets/models
           
           # Gujarati (Meta MMS-TTS)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2
-          tar -xjf vits-mms-guj.tar.bz2 && rm vits-mms-guj.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2 && tar -xjf vits-mms-guj.tar.bz2 && rm vits-mms-guj.tar.bz2 || true
           
           # Sanskrit (Meta MMS-TTS)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2
-          tar -xjf vits-mms-san.tar.bz2 && rm vits-mms-san.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2 && tar -xjf vits-mms-san.tar.bz2 && rm vits-mms-san.tar.bz2 || true
           
           # Hindi (Piper AI Voice)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2
-          tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2 || true
           
           # English (Piper AI Voice)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2
-          tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2 && tar -xjf vits-piper-en_US-lessac-medium.tar.bz2 && rm vits-piper-en_US-lessac-medium.tar.bz2 || true
 
       - name: Build Debug APK
         run: |
