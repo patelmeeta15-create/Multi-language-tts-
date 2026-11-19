@@ -16,11 +16,20 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Run App Setup Script
+      - name: Run App Setup Script & Fix Sherpa-ONNX
         run: |
           if [ -f "Setup.sh" ]; then mv Setup.sh setup.sh; fi
           chmod +x setup.sh
           ./setup.sh
+          
+          # Download official sherpa-onnx Android AAR directly into app/libs
+          mkdir -p app/libs
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.28/sherpa-onnx-1.10.28.aar -O app/libs/sherpa-onnx.aar
+          
+          # Replace missing Maven dependency with local AAR in app/build.gradle
+          sed -i '/sherpa-onnx/d' app/build.gradle
+          sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
+          
           gradle wrapper --gradle-version 8.5
 
       - name: Download Offline AI Models (Gujarati, Hindi, Sanskrit, English)
