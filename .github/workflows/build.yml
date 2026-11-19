@@ -22,11 +22,13 @@ jobs:
           chmod +x setup.sh
           ./setup.sh
           
-          # Automatically fetch the exact latest sherpa-onnx Android AAR release URL
+          # Download verified working sherpa-onnx Android AAR directly into app/libs
           mkdir -p app/libs
-          AAR_URL=$(curl -s https://api.github.com/repos/k2-fsa/sherpa-onnx/releases/latest | grep "browser_download_url.*\.aar\"" | head -n 1 | cut -d '"' -f 4)
-          echo "Downloading AAR from: $AAR_URL"
-          wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar || true
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.30/sherpa-onnx-1.10.30.aar -O app/libs/sherpa-onnx.aar || \
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.29/sherpa-onnx-1.10.29.aar -O app/libs/sherpa-onnx.aar || \
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.27/sherpa-onnx-1.10.27.aar -O app/libs/sherpa-onnx.aar
+          
+          ls -lh app/libs/sherpa-onnx.aar
           
           # Replace missing Maven dependency with local AAR in app/build.gradle
           sed -i '/sherpa-onnx/d' app/build.gradle
@@ -40,16 +42,18 @@ jobs:
           cd app/src/main/assets/models
           
           # Gujarati (Meta MMS-TTS)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2 && tar -xjf vits-mms-guj.tar.bz2 && rm vits-mms-guj.tar.bz2 || true
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2 && tar -xjf vits-mms-guj.tar.bz2 && rm vits-mms-guj.tar.bz2
           
           # Sanskrit (Meta MMS-TTS)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2 && tar -xjf vits-mms-san.tar.bz2 && rm vits-mms-san.tar.bz2 || true
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2 && tar -xjf vits-mms-san.tar.bz2 && rm vits-mms-san.tar.bz2
           
           # Hindi (Piper AI Voice)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2 || true
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
           
-          # English (Piper AI Voice)
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2 && tar -xjf vits-piper-en_US-lessac-medium.tar.bz2 && rm vits-piper-en_US-lessac-medium.tar.bz2 || true
+          # English (Piper AI Voice matching setup.sh: amy-medium)
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2 && tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
+          
+          ls -la
 
       - name: Build Debug APK
         run: |
