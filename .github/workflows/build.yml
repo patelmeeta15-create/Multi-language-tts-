@@ -22,9 +22,11 @@ jobs:
           chmod +x setup.sh
           ./setup.sh
           
-          # Download official sherpa-onnx Android AAR directly into app/libs
+          # Automatically fetch the exact latest sherpa-onnx Android AAR release URL
           mkdir -p app/libs
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.28/sherpa-onnx-1.10.28.aar -O app/libs/sherpa-onnx.aar
+          AAR_URL=$(curl -s https://api.github.com/repos/k2-fsa/sherpa-onnx/releases/latest | grep "browser_download_url.*\.aar\"" | head -n 1 | cut -d '"' -f 4)
+          echo "Downloading AAR from: $AAR_URL"
+          wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar || true
           
           # Replace missing Maven dependency with local AAR in app/build.gradle
           sed -i '/sherpa-onnx/d' app/build.gradle
