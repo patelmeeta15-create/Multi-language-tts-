@@ -22,10 +22,10 @@ jobs:
           chmod +x setup.sh
           ./setup.sh
           
-          # Find the exact live Android AAR URL across recent sherpa-onnx releases
+          # Find the standard Android AAR URL (excluding -rknn NPU builds)
           mkdir -p app/libs
-          AAR_URL=$(curl -s "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=15" | grep -o 'https://[^"]*sherpa-onnx[^"]*\.aar' | head -n 1)
-          echo "Found AAR URL: $AAR_URL"
+          AAR_URL=$(curl -s "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=15" | grep -o 'https://[^"]*sherpa-onnx[^"]*\.aar' | grep -v 'rknn' | head -n 1)
+          echo "Found Standard Android AAR URL: $AAR_URL"
           wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar
           ls -lh app/libs/sherpa-onnx.aar
           
@@ -33,7 +33,10 @@ jobs:
           sed -i '/sherpa-onnx/d' app/build.gradle
           sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
           
-          gradle wrapper --gradle-version 8.5
+          # Download and setup Gradle 8.5 reliably
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle-8.5.zip
+          unzip -q /tmp/gradle-8.5.zip -d /tmp
+          /tmp/gradle-8.5/bin/gradle wrapper --gradle-version 8.5
 
       - name: Download Offline AI Models (Gujarati, Hindi, Sanskrit, English)
         run: |
