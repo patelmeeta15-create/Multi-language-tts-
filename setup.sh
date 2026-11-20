@@ -3,7 +3,7 @@ mkdir -p app/src/main/java/com/ai/multitts
 mkdir -p app/src/main/res/xml
 mkdir -p app/src/main/res/layout
 
-# 1. AndroidManifest.xml (Includes Settings Gear Icon for System TTS)
+# 1. AndroidManifest.xml
 cat << 'EOF' > app/src/main/AndroidManifest.xml
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -52,14 +52,14 @@ cat << 'EOF' > app/src/main/AndroidManifest.xml
 </manifest>
 EOF
 
-# 2. tts_engine.xml (Enables Gear Icon next to Preferred Engine)
+# 2. tts_engine.xml
 cat << 'EOF' > app/src/main/res/xml/tts_engine.xml
 <?xml version="1.0" encoding="utf-8"?>
 <tts-engine xmlns:android="http://schemas.android.com/apk/res/android"
     android:settingsActivity="com.ai.multitts.MainActivity" />
 EOF
 
-# 3. MainActivity.kt (Full Settings UI like Google TTS + Direct Voice Test)
+# 3. MainActivity.kt
 cat << 'EOF' > app/src/main/java/com/ai/multitts/MainActivity.kt
 package com.ai.multitts
 
@@ -77,7 +77,6 @@ import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
-import java.io.File
 import java.util.Locale
 
 class MainActivity : Activity() {
@@ -86,7 +85,6 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Handle System TTS Data Check
         if (intent?.action == TextToSpeech.Engine.ACTION_CHECK_TTS_DATA) {
             val checkIntent = Intent()
             val voices = arrayListOf("guj-IND", "hin-IND", "san-IND", "eng-USA")
@@ -97,7 +95,6 @@ class MainActivity : Activity() {
             return
         }
 
-        // Handle Sample Text Request from System Settings
         if (intent?.action == TextToSpeech.Engine.ACTION_GET_SAMPLE_TEXT) {
             val sampleIntent = Intent()
             sampleIntent.putExtra(
@@ -119,18 +116,22 @@ class MainActivity : Activity() {
         val title = TextView(this).apply {
             text = "Multilingual AI TTS સેટિંગ્સ"
             textSize = 22f
-            setPadding(0, 0, 0, 24)
+            setPadding(0, 0, 0, 16)
         }
 
         val statusText = TextView(this).apply {
-            val modelsDir = File(filesDir, "models")
-            val ready = modelsDir.exists() && (modelsDir.list()?.isNotEmpty() == true)
-            text = if (ready) "એન્જિન સ્થિતિ: તૈયાર (Offline Models Loaded)" else "એન્જિન સ્થિતિ: પ્રથમ વખત લોડ થઈ રહ્યું છે..."
-            textSize = 15f
+            text = "એન્જિન તપાસી રહ્યું છે..."
+            textSize = 14f
             setPadding(0, 0, 0, 24)
         }
 
-        // Language Mode Selection (Like Google TTS Voice Settings)
+        Thread {
+            val diag = MultilingualTtsService.initEngine(applicationContext)
+            runOnUiThread {
+                statusText.text = "સ્થિતિ: $diag"
+            }
+        }.start()
+
         val modeLabel = TextView(this).apply {
             text = "ભાષા અને અવાજ પસંદગી:"
             textSize = 16f
@@ -163,7 +164,6 @@ class MainActivity : Activity() {
             }
         }
 
-        // Speech Speed Control
         val speedLabel = TextView(this).apply {
             val savedSpeed = prefs.getInt("speech_speed", 100)
             text = "અવાજની ઝડપ (Speed): $savedSpeed%"
@@ -189,8 +189,22 @@ class MainActivity : Activity() {
             setText("નમસ્તે! આ ઓફલાઈન AI અવાજ છે. सर्वे भवन्तु सुखिनः। Hello world!")
         }
 
+        val directSpeakBtn = Button(this).apply {
+            text = "સીધો AI અવાજ ટેસ્ટ કરો (Direct Speak)"
+            setOnClickListener {
+                val sample = testInput.text.toString()
+                statusText.text = "અવાજ બનાવી રહ્યું છે..."
+                Thread {
+                    val result = MultilingualTtsService.speakDirectly(applicationContext, sample)
+                    runOnUiThread {
+                        statusText.text = result
+                    }
+                }.start()
+            }
+        }
+
         val speakBtn = Button(this).apply {
-            text = "અવાજ ટેસ્ટ કરો (Speak Test)"
+            text = "સિસ્ટમ TTS ટેસ્ટ કરો (System Speak)"
             setOnClickListener {
                 val sample = testInput.text.toString()
                 localTts?.shutdown()
@@ -198,9 +212,8 @@ class MainActivity : Activity() {
                     if (status == TextToSpeech.SUCCESS) {
                         localTts?.language = Locale("gu", "IN")
                         localTts?.speak(sample, TextToSpeech.QUEUE_FLUSH, null, "test_utterance")
-                        statusText.text = "એન્જિન સ્થિતિ: અવાજ ચાલુ છે!"
                     } else {
-                        statusText.text = "એન્જિન સ્થિતિ: એરર (Code: $status)"
+                        statusText.text = "System TTS એરર: Code $status"
                     }
                 }, packageName)
             }
@@ -221,6 +234,7 @@ class MainActivity : Activity() {
         layout.addView(speedLabel)
         layout.addView(speedSeek)
         layout.addView(testInput)
+        layout.addView(directSpeakBtn)
         layout.addView(speakBtn)
         layout.addView(openSettingsBtn)
         scroll.addView(layout)
@@ -234,12 +248,14 @@ class MainActivity : Activity() {
 }
 EOF
 
-# 4. MultilingualTtsService.kt (Thread-Safe Lazy Loading + Full Android Voice Support)
+# 4. MultilingualTtsService.kt
 cat << 'EOF' > app/src/main/java/com/ai/multitts/MultilingualTtsService.kt
 package com.ai.multitts
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioTrack
 import android.speech.tts.SynthesisCallback
 import android.speech.tts.SynthesisRequest
 import android.speech.tts.TextToSpeech
@@ -255,71 +271,208 @@ import java.io.FileOutputStream
 import java.util.Locale
 
 class MultilingualTtsService : TextToSpeechService() {
-    private var gujTts: OfflineTts? = null
-    private var hinTts: OfflineTts? = null
-    private var sanTts: OfflineTts? = null
-    private var engTts: OfflineTts? = null
-    @Volatile private var isInitialized = false
+
+    companion object {
+        private var gujTts: OfflineTts? = null
+        private var hinTts: OfflineTts? = null
+        private var sanTts: OfflineTts? = null
+        private var engTts: OfflineTts? = null
+        @Volatile private var isInitialized = false
+        var lastStatus: String = "પ્રારંભ બાકી"
+
+        @Synchronized
+        fun initEngine(context: Context): String {
+            if (isInitialized && (gujTts != null || engTts != null)) {
+                return lastStatus
+            }
+            try {
+                val baseDir = File(context.filesDir, "models")
+                val markerFile = File(baseDir, ".extracted_v2")
+                if (!markerFile.exists()) {
+                    baseDir.deleteRecursively()
+                    copyAssets(context, "models", baseDir)
+                    markerFile.createNewFile()
+                }
+
+                val errors = mutableListOf<String>()
+                gujTts = loadVitsModel(File(baseDir, "vits-mms-guj"), "model.onnx", "tokens.txt", "", errors)
+                sanTts = loadVitsModel(File(baseDir, "vits-mms-san"), "model.onnx", "tokens.txt", "", errors)
+                hinTts = loadVitsModel(File(baseDir, "vits-piper-hi_IN-rohan-medium"), "hi_IN-rohan-medium.onnx", "tokens.txt", "espeak-ng-data", errors)
+                engTts = loadVitsModel(File(baseDir, "vits-piper-en_US-amy-medium"), "en_US-amy-medium.onnx", "tokens.txt", "espeak-ng-data", errors)
+
+                val loaded = listOfNotNull(
+                    if (gujTts != null) "Guj" else null,
+                    if (hinTts != null) "Hin" else null,
+                    if (sanTts != null) "San" else null,
+                    if (engTts != null) "Eng" else null
+                )
+
+                isInitialized = loaded.isNotEmpty()
+                lastStatus = if (loaded.isNotEmpty()) {
+                    "તૈયાર! લોડ થયેલ અવાજો: ${loaded.joinToString(", ")}"
+                } else {
+                    "એરર: ${errors.joinToString(" | ")}"
+                }
+            } catch (e: Throwable) {
+                lastStatus = "ક્રેશ એરર: ${e.javaClass.simpleName}: ${e.message}"
+                Log.e("MultilingualTTS", "Init failed", e)
+            }
+            return lastStatus
+        }
+
+        private fun loadVitsModel(
+            dir: File,
+            modelName: String,
+            tokensName: String,
+            dataDirName: String,
+            errors: MutableList<String>
+        ): OfflineTts? {
+            return try {
+                if (!dir.exists()) {
+                    errors.add("${dir.name} ફોલ્ડર નથી")
+                    return null
+                }
+                val modelFile = File(dir, modelName)
+                if (!modelFile.exists()) {
+                    val filesInside = dir.list()?.joinToString(",") ?: "empty"
+                    errors.add("$modelName નથી (અંદર: $filesInside)")
+                    return null
+                }
+                val vitsConfig = OfflineTtsVitsModelConfig(
+                    model = modelFile.absolutePath,
+                    tokens = File(dir, tokensName).absolutePath,
+                    dataDir = if (dataDirName.isNotEmpty()) File(dir, dataDirName).absolutePath else ""
+                )
+                val modelConfig = OfflineTtsModelConfig(vits = vitsConfig, numThreads = 2)
+                OfflineTts(config = OfflineTtsConfig(model = modelConfig))
+            } catch (e: Throwable) {
+                errors.add("${dir.name}: ${e.message}")
+                Log.e("MultilingualTTS", "Error loading $modelName", e)
+                null
+            }
+        }
+
+        private fun copyAssets(context: Context, assetPath: String, outDir: File) {
+            val list = context.assets.list(assetPath) ?: return
+            if (list.isEmpty()) {
+                outDir.parentFile?.mkdirs()
+                context.assets.open(assetPath).use { input ->
+                    FileOutputStream(outDir).use { output -> input.copyTo(output) }
+                }
+            } else {
+                outDir.mkdirs()
+                for (item in list) {
+                    copyAssets(context, "$assetPath/$item", File(outDir, item))
+                }
+            }
+        }
+
+        fun splitByScript(text: String): List<Pair<String, String>> {
+            val segments = mutableListOf<Pair<String, String>>()
+            val current = StringBuilder()
+            var currentScript = ""
+
+            for (ch in text) {
+                val script = when {
+                    ch in '\u0A80'..'\u0AFF' -> "GUJ"
+                    ch in '\u0900'..'\u097F' -> "DEV"
+                    ch in 'A'..'Z' || ch in 'a'..'z' -> "ENG"
+                    else -> currentScript.ifEmpty { "ENG" }
+                }
+                if (currentScript.isNotEmpty() && script != currentScript) {
+                    val seg = current.toString().trim()
+                    if (seg.isNotEmpty()) segments.add(currentScript to seg)
+                    current.clear()
+                }
+                currentScript = script
+                current.append(ch)
+            }
+            val lastSeg = current.toString().trim()
+            if (lastSeg.isNotEmpty()) segments.add(currentScript to lastSeg)
+            return segments
+        }
+
+        fun speakDirectly(context: Context, text: String): String {
+            val status = initEngine(context)
+            if (!isInitialized) return status
+
+            val prefs = context.getSharedPreferences("tts_prefs", Context.MODE_PRIVATE)
+            val preferSanskrit = prefs.getBoolean("prefer_sanskrit", false)
+            val voiceMode = prefs.getInt("voice_mode", 0)
+            val speed = (prefs.getInt("speech_speed", 100) / 100.0f).coerceIn(0.5f, 2.5f)
+
+            val segments = splitByScript(text)
+            var totalSamples = 0
+            for ((script, segText) in segments) {
+                val tts = pickTts(voiceMode, preferSanskrit, script, segText) ?: continue
+                try {
+                    val audio = tts.generate(text = segText, sid = 0, speed = speed)
+                    if (audio.samples.isNotEmpty()) {
+                        totalSamples += audio.samples.size
+                        playPcm(audio.samples, audio.sampleRate)
+                    }
+                } catch (e: Throwable) {
+                    return "ઓડિયો એરર ($script): ${e.message}"
+                }
+            }
+            return if (totalSamples > 0) "અવાજ સફળતાપૂર્વક વાગ્યો! ($totalSamples samples)" else "ચેતવણી: 0 samples બન્યા"
+        }
+
+        private fun pickTts(voiceMode: Int, preferSanskrit: Boolean, script: String, segText: String): OfflineTts? {
+            return when (voiceMode) {
+                2 -> gujTts
+                3 -> hinTts
+                4 -> sanTts
+                5 -> engTts
+                else -> when (script) {
+                    "GUJ" -> gujTts
+                    "DEV" -> if (voiceMode == 1 || preferSanskrit || segText.contains("ः") || segText.contains("॥") || segText.endsWith("म्")) sanTts else hinTts
+                    else -> engTts
+                }
+            } ?: gujTts ?: engTts ?: hinTts ?: sanTts
+        }
+
+        private fun playPcm(samples: FloatArray, sampleRate: Int) {
+            val pcm = ShortArray(samples.size)
+            for (i in samples.indices) {
+                pcm[i] = (samples[i] * 32767.0f).toInt().coerceIn(-32768, 32767).toShort()
+            }
+            val minBuf = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            ).coerceAtLeast(pcm.size * 2)
+
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(minBuf)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+
+            track.write(pcm, 0, pcm.size)
+            track.play()
+            val durationMs = ((pcm.size.toLong() * 1000L) / sampleRate) + 150L
+            Thread.sleep(durationMs)
+            track.stop()
+            track.release()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
-        Thread { ensureModelsInitialized() }.start()
-    }
-
-    @Synchronized
-    private fun ensureModelsInitialized() {
-        if (isInitialized) return
-        try {
-            val baseDir = File(filesDir, "models")
-            val markerFile = File(baseDir, ".extracted_ok")
-            if (!markerFile.exists()) {
-                copyAssets("models", baseDir)
-                markerFile.createNewFile()
-            }
-
-            gujTts = loadVitsModel(File(baseDir, "vits-mms-guj"), "model.onnx", "tokens.txt", "")
-            sanTts = loadVitsModel(File(baseDir, "vits-mms-san"), "model.onnx", "tokens.txt", "")
-            hinTts = loadVitsModel(File(baseDir, "vits-piper-hi_IN-rohan-medium"), "hi_IN-rohan-medium.onnx", "tokens.txt", "espeak-ng-data")
-            engTts = loadVitsModel(File(baseDir, "vits-piper-en_US-amy-medium"), "en_US-amy-medium.onnx", "tokens.txt", "espeak-ng-data")
-            isInitialized = true
-        } catch (e: Throwable) {
-            Log.e("MultilingualTTS", "Init failed", e)
-        }
-    }
-
-    private fun loadVitsModel(dir: File, modelName: String, tokensName: String, dataDirName: String): OfflineTts? {
-        return try {
-            val modelFile = File(dir, modelName)
-            if (!modelFile.exists()) {
-                Log.e("MultilingualTTS", "Missing model: ${modelFile.absolutePath}")
-                return null
-            }
-            val vitsConfig = OfflineTtsVitsModelConfig(
-                model = modelFile.absolutePath,
-                tokens = File(dir, tokensName).absolutePath,
-                dataDir = if (dataDirName.isNotEmpty()) File(dir, dataDirName).absolutePath else ""
-            )
-            val modelConfig = OfflineTtsModelConfig(vits = vitsConfig, numThreads = 2)
-            OfflineTts(config = OfflineTtsConfig(model = modelConfig))
-        } catch (e: Throwable) {
-            Log.e("MultilingualTTS", "Error loading $modelName", e)
-            null
-        }
-    }
-
-    private fun copyAssets(assetPath: String, outDir: File) {
-        val list = assets.list(assetPath) ?: return
-        if (list.isEmpty()) {
-            outDir.parentFile?.mkdirs()
-            assets.open(assetPath).use { input ->
-                FileOutputStream(outDir).use { output -> input.copyTo(output) }
-            }
-        } else {
-            outDir.mkdirs()
-            for (item in list) {
-                copyAssets("$assetPath/$item", File(outDir, item))
-            }
-        }
+        Thread { initEngine(applicationContext) }.start()
     }
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
@@ -357,7 +510,7 @@ class MultilingualTtsService : TextToSpeechService() {
         }
 
         if (!isInitialized) {
-            ensureModelsInitialized()
+            initEngine(applicationContext)
         }
 
         val prefs = getSharedPreferences("tts_prefs", Context.MODE_PRIVATE)
@@ -367,42 +520,37 @@ class MultilingualTtsService : TextToSpeechService() {
         val reqSpeed = (request.speechRate / 100.0f)
         val finalSpeed = (reqSpeed * customSpeed).coerceIn(0.5f, 2.5f)
 
-        val selectedTts = when (voiceMode) {
-            2 -> gujTts
-            3 -> hinTts
-            4 -> sanTts
-            5 -> engTts
-            else -> when {
-                text.any { it in '\u0A80'..'\u0AFF' } -> gujTts
-                text.any { it in '\u0900'..'\u097F' } -> {
-                    if (voiceMode == 1 || preferSanskrit || text.contains("ः") || text.contains("॥") || text.endsWith("म्")) sanTts else hinTts
-                }
-                else -> engTts
-            }
-        } ?: gujTts ?: engTts ?: hinTts ?: sanTts
-
-        if (selectedTts == null) {
-            callback.error()
-            return
-        }
+        val segments = splitByScript(text)
+        var started = false
 
         try {
-            val audio = selectedTts.generate(text = text, sid = 0, speed = finalSpeed)
-            callback.start(audio.sampleRate, AudioFormat.ENCODING_PCM_16BIT, 1)
+            for ((script, segText) in segments) {
+                val tts = pickTts(voiceMode, preferSanskrit, script, segText) ?: continue
+                val audio = tts.generate(text = segText, sid = 0, speed = finalSpeed)
+                if (audio.samples.isEmpty()) continue
 
-            val pcmData = ByteArray(audio.samples.size * 2)
-            for (i in audio.samples.indices) {
-                val sample = (audio.samples[i] * 32767.0f).toInt().coerceIn(-32768, 32767)
-                pcmData[i * 2] = (sample and 0xFF).toByte()
-                pcmData[i * 2 + 1] = ((sample shr 8) and 0xFF).toByte()
+                if (!started) {
+                    callback.start(audio.sampleRate, AudioFormat.ENCODING_PCM_16BIT, 1)
+                    started = true
+                }
+
+                val pcmData = ByteArray(audio.samples.size * 2)
+                for (i in audio.samples.indices) {
+                    val sample = (audio.samples[i] * 32767.0f).toInt().coerceIn(-32768, 32767)
+                    pcmData[i * 2] = (sample and 0xFF).toByte()
+                    pcmData[i * 2 + 1] = ((sample shr 8) and 0xFF).toByte()
+                }
+
+                var offset = 0
+                val chunkSize = 4096
+                while (offset < pcmData.size) {
+                    val len = minOf(chunkSize, pcmData.size - offset)
+                    callback.audioAvailable(pcmData, offset, len)
+                    offset += len
+                }
             }
-
-            var offset = 0
-            val chunkSize = 4096
-            while (offset < pcmData.size) {
-                val len = minOf(chunkSize, pcmData.size - offset)
-                callback.audioAvailable(pcmData, offset, len)
-                offset += len
+            if (!started) {
+                callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
             }
             callback.done()
         } catch (e: Throwable) {
@@ -413,7 +561,7 @@ class MultilingualTtsService : TextToSpeechService() {
 }
 EOF
 
-# 5. build.gradle (App level)
+# 5. build.gradle
 cat << 'EOF' > build.gradle
 plugins {
     id 'com.android.application' version '8.2.0' apply false
@@ -436,8 +584,8 @@ android {
         applicationId "com.ai.multitts"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "2.0"
+        versionCode 3
+        versionName "3.0"
     }
 
     buildTypes {
