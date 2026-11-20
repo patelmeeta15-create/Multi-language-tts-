@@ -17,23 +17,22 @@ jobs:
           distribution: 'temurin'
 
       - name: Run App Setup Script & Fix Sherpa-ONNX
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f "Setup.sh" ]; then mv Setup.sh setup.sh; fi
           chmod +x setup.sh
           ./setup.sh
-          
-          # Find the standard Android AAR URL (excluding -rknn NPU builds)
+
           mkdir -p app/libs
-          AAR_URL=$(curl -s "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=15" | grep -o 'https://[^"]*sherpa-onnx[^"]*\.aar' | grep -v 'rknn' | head -n 1)
+          AAR_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=60" | grep -o 'https://[^"]*sherpa-onnx[^"]*\.aar' | grep -v 'rknn' | head -n 1)
           echo "Found Standard Android AAR URL: $AAR_URL"
           wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar
           ls -lh app/libs/sherpa-onnx.aar
-          
-          # Replace missing Maven dependency with local AAR in app/build.gradle
+
           sed -i '/sherpa-onnx/d' app/build.gradle
           sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
-          
-          # Download and setup Gradle 8.5 reliably
+
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle-8.5.zip
           unzip -q /tmp/gradle-8.5.zip -d /tmp
           /tmp/gradle-8.5/bin/gradle wrapper --gradle-version 8.5
@@ -42,19 +41,12 @@ jobs:
         run: |
           mkdir -p app/src/main/assets/models
           cd app/src/main/assets/models
-          
-          # Gujarati (Meta MMS-TTS)
+
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2 && tar -xjf vits-mms-guj.tar.bz2 && rm vits-mms-guj.tar.bz2
-          
-          # Sanskrit (Meta MMS-TTS)
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2 && tar -xjf vits-mms-san.tar.bz2 && rm vits-mms-san.tar.bz2
-          
-          # Hindi (Piper AI Voice)
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
-          
-          # English (Piper AI Voice matching setup.sh: amy-medium)
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2 && tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
-          
+
           ls -la
 
       - name: Build Debug APK
