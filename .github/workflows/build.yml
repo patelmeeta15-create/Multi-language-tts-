@@ -32,13 +32,12 @@ jobs:
           done
           echo "Found AAR URL: $AAR_URL"
           wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar
-          ls -lh app/libs/sherpa-onnx.aar
 
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle-8.5.zip
           unzip -q /tmp/gradle-8.5.zip -d /tmp
           /tmp/gradle-8.5/bin/gradle wrapper --gradle-version 8.5
 
-      - name: Download Offline AI Models (Gujarati, Hindi, Sanskrit, English)
+      - name: Download & Verify Offline AI Models
         run: |
           mkdir -p app/src/main/assets/models
           cd app/src/main/assets/models
@@ -48,7 +47,9 @@ jobs:
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2 && tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
 
-          ls -la
+          find . -maxdepth 3
+          head -n 5 vits-piper-en_US-amy-medium/tokens.txt || true
+          head -n 5 vits-mms-guj/tokens.txt || true
 
       - name: Build Debug APK
         run: |
