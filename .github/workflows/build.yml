@@ -16,22 +16,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Run App Setup Script & Fix Sherpa-ONNX
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run App Setup Script & Download Sherpa-ONNX
         run: |
           if [ -f "Setup.sh" ]; then mv Setup.sh setup.sh; fi
           chmod +x setup.sh
           ./setup.sh
 
           mkdir -p app/libs
-          AAR_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=60" | grep -o 'https://[^"]*sherpa-onnx[^"]*\.aar' | grep -v 'rknn' | head -n 1)
-          echo "Found Standard Android AAR URL: $AAR_URL"
-          wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.30/sherpa-onnx-1.10.30.aar -O app/libs/sherpa-onnx.aar
           ls -lh app/libs/sherpa-onnx.aar
-
-          sed -i '/sherpa-onnx/d' app/build.gradle
-          sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
 
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle-8.5.zip
           unzip -q /tmp/gradle-8.5.zip -d /tmp
