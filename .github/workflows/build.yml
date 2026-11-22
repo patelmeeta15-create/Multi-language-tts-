@@ -31,10 +31,10 @@ jobs:
             if [ -n "$AAR_URL" ]; then break; fi
           done
           echo "Found AAR URL: $AAR_URL"
-          curl -fL "$AAR_URL" -o app/libs/sherpa-onnx.aar
+          wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar
           ls -lh app/libs/sherpa-onnx.aar
 
-          curl -fsSL https://services.gradle.org/distributions/gradle-8.5-bin.zip -o /tmp/gradle-8.5.zip
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle-8.5.zip
           unzip -q /tmp/gradle-8.5.zip -d /tmp
           /tmp/gradle-8.5/bin/gradle wrapper --gradle-version 8.5
 
@@ -43,10 +43,10 @@ jobs:
           mkdir -p app/src/main/assets/models
           cd app/src/main/assets/models
 
-          curl -fsSL https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2 | tar -xj
-          curl -fsSL https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2 | tar -xj
-          curl -fsSL https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 | tar -xj
-          curl -fsSL https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2 | tar -xj
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-guj.tar.bz2 && tar -xjf vits-mms-guj.tar.bz2 && rm vits-mms-guj.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-san.tar.bz2 && tar -xjf vits-mms-san.tar.bz2 && rm vits-mms-san.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2 && tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
 
           ls -la
 
