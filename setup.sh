@@ -102,20 +102,6 @@ class MainActivity : Activity() {
             }
         }
 
-        val sysSpeakBtn = Button(this).apply {
-            text = "સિસ્ટમ TTS ટેસ્ટ કરો (System Speak)"
-            setOnClickListener {
-                val txt = testInput.text.toString()
-                localTts?.shutdown()
-                localTts = TextToSpeech(this@MainActivity, { st ->
-                    if (st == TextToSpeech.SUCCESS) {
-                        localTts?.language = Locale("gu", "IN")
-                        localTts?.speak(txt, TextToSpeech.QUEUE_FLUSH, null, "t1")
-                    } else statusText.text = "System TTS Error: $st"
-                }, packageName)
-            }
-        }
-
         val settingsBtn = Button(this).apply {
             text = "ફોનના TTS સેટિંગ્સ ખોલો (TalkBack માટે પસંદ કરો)"
             setOnClickListener { startActivity(Intent("com.android.settings.TTS_SETTINGS")) }
@@ -127,7 +113,6 @@ class MainActivity : Activity() {
         layout.addView(speedSeek)
         layout.addView(testInput)
         layout.addView(directSpeakBtn)
-        layout.addView(sysSpeakBtn)
         layout.addView(settingsBtn)
         setContentView(ScrollView(this).apply { addView(layout) })
     }
@@ -163,7 +148,7 @@ class MultilingualTtsService : TextToSpeechService() {
             if (isInit && (engTts != null || hinTts != null || gujTts != null)) return lastStatus
             try {
                 val baseDir = File(context.filesDir, "models")
-                val marker = File(baseDir, ".v6")
+                val marker = File(baseDir, ".v7")
                 if (!marker.exists()) {
                     baseDir.deleteRecursively()
                     copyAssets(context, "models", baseDir)
@@ -195,7 +180,8 @@ class MultilingualTtsService : TextToSpeechService() {
                 val mf = File(dir, modelName)
                 val tf = File(dir, "tokens.txt")
                 if (!mf.exists() || !tf.exists()) {
-                    err.add("$label ફાઈલ નથી")
+                    val found = dir.list()?.joinToString(",") ?: "empty"
+                    err.add("$label મિસિંગ($found)")
                     return null
                 }
                 val cfg = OfflineTtsConfig(
@@ -228,17 +214,28 @@ class MultilingualTtsService : TextToSpeechService() {
             }
         }
 
-        // Gujarati/Devanagari phonetic fallback to Hindi Piper voice if MMS fails
-        private fun gujToDevanagariPhonetic(text: String): String {
+        private fun toRomanPhonetic(text: String): String {
+            val map = mapOf(
+                'અ' to "a", 'આ' to "aa", 'ઇ' to "i", 'ઈ' to "ee", 'ઉ' to "u", 'ઊ' to "oo",
+                'એ' to "e", 'ઐ' to "ai", 'ઓ' to "o", 'ઔ' to "au",
+                'ક' to "ka", 'ખ' to "kha", 'ગ' to "ga", 'ઘ' to "gha",
+                'ચ' to "cha", 'છ' to "chha", 'જ' to "ja", 'ઝ' to "jha",
+                'ટ' to "ta", 'ઠ' to "tha", 'ડ' to "da", 'ઢ' to "dha", 'ણ' to "na",
+                'ત' to "ta", 'થ' to "tha", 'દ' to "da", 'ધ' to "dha", 'ન' to "na",
+                'પ' to "pa", 'ફ' to "pha", 'બ' to "ba", 'ભ' to "bha", 'મ' to "ma",
+                'ય' to "ya", 'ર' to "ra", 'લ' to "la", 'વ' to "va",
+                'શ' to "sha", 'ષ' to "sha", 'સ' to "sa", 'હ' to "ha", 'ળ' to "la",
+                'ા' to "aa", 'િ' to "i", 'ી' to "ee", 'ુ' to "u", 'ૂ' to "oo",
+                'ે' to "e", 'ૈ' to "ai", 'ો' to "o", 'ૌ' to "au", 'ં' to "n", 'ઃ' to "h", '્' to ""
+            )
             val sb = StringBuilder()
             for (ch in text) {
-                if (ch in '\u0A81'..'\u0AF9') {
-                    sb.append((ch.code - 0x0A80 + 0x0900).toChar())
-                } else {
-                    sb.append(ch)
-                }
+                val mapped = map[ch]
+                if (mapped != null) sb.append(mapped)
+                else if (ch in '\u0900'..'\u097F') sb.append(map[(ch.code - 0x0900 + 0x0A80).toChar()] ?: ch)
+                else sb.append(ch)
             }
-            return sb.toString()
+            return sb.toString().lowercase()
         }
 
         fun splitByScript(text: String): List<Pair<String, String>> {
@@ -283,13 +280,13 @@ class MultilingualTtsService : TextToSpeechService() {
                     return "ઓડિયો એરર: ${e.message}"
                 }
             }
-            return if (total > 0) "અવાજ સફળતાપૂર્વક વાગ્યો! ($total samples)" else "0 samples બન્યા"
+            return if (total > 0) "અવાજ સફળતાપૂર્વક વાગ્યો! ($total samples)" else "0 samples ($text)"
         }
 
         private fun resolveEngine(sc: String, seg: String): Pair<OfflineTts?, String> {
             return when (sc) {
-                "GUJ" -> if (gujTts != null) gujTts to seg else hinTts to gujToDevanagariPhonetic(seg)
-                "DEV" -> if (sanTts != null && (seg.contains("ः") || seg.contains("॥"))) sanTts to seg else hinTts to seg
+                "GUJ" -> if (gujTts != null) gujTts to toRomanPhonetic(seg) else hinTts to seg
+                "DEV" -> if (sanTts != null && (seg.contains("ः") || seg.contains("॥"))) sanTts to toRomanPhonetic(seg) else hinTts to seg
                 else -> engTts to seg
             }
         }
@@ -375,8 +372,8 @@ android {
         applicationId "com.ai.multitts"
         minSdk 24
         targetSdk 34
-        versionCode 6
-        versionName "6.0"
+        versionCode 7
+        versionName "7.0"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
