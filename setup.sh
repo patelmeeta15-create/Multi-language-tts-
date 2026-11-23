@@ -35,8 +35,6 @@ import android.widget.*
 import java.util.Locale
 
 class MainActivity : Activity() {
-    private var localTts: TextToSpeech? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (intent?.action == TextToSpeech.Engine.ACTION_CHECK_TTS_DATA) {
@@ -116,11 +114,6 @@ class MainActivity : Activity() {
         layout.addView(settingsBtn)
         setContentView(ScrollView(this).apply { addView(layout) })
     }
-
-    override fun onDestroy() {
-        localTts?.shutdown()
-        super.onDestroy()
-    }
 }
 EOF
 
@@ -128,37 +121,48 @@ cat << 'EOF' > app/src/main/java/com/ai/multitts/MultilingualTtsService.kt
 package com.ai.multitts
 
 import android.content.Context
-import android.content.res.AssetManager
 import android.media.*
 import android.speech.tts.*
 import com.k2fsa.sherpa.onnx.*
+import java.io.*
 import java.util.Locale
+import java.util.zip.ZipInputStream
 
 class MultilingualTtsService : TextToSpeechService() {
     companion object {
-        private var gujTts: OfflineTts? = null
         private var hinTts: OfflineTts? = null
-        private var sanTts: OfflineTts? = null
         private var engTts: OfflineTts? = null
         @Volatile private var isInit = false
         var lastStatus = "પ્રારંભ બાકી"
 
         @Synchronized
         fun initEngine(context: Context): String {
-            if (isInit && (engTts != null || hinTts != null || gujTts != null)) return lastStatus
+            if (isInit && (engTts != null || hinTts != null)) return lastStatus
             try {
-                val assets = context.assets
+                val baseDir = File(context.filesDir, "tts_v9")
+                val marker = File(baseDir, ".ready")
+                if (!marker.exists()) {
+                    baseDir.deleteRecursively()
+                    baseDir.mkdirs()
+                    unzipAsset(context, "models.zip", baseDir)
+                    val espeakZip = File(baseDir, "espeak-ng-data.zip")
+                    if (espeakZip.exists()) {
+                        FileInputStream(espeakZip).use { unzipStream(it, baseDir) }
+                        espeakZip.delete()
+                    }
+                    marker.createNewFile()
+                }
+
+                val espeakDir = File(baseDir, "espeak-ng-data").absolutePath
                 val ok = mutableListOf<String>()
                 val err = mutableListOf<String>()
 
-                hinTts = loadFromAssets(assets, "models/vits-piper-hi_IN-rohan-medium", "hi_IN-rohan-medium.onnx", "models/vits-piper-hi_IN-rohan-medium/espeak-ng-data", "Hindi", ok, err)
-                engTts = loadFromAssets(assets, "models/vits-piper-en_US-amy-medium", "en_US-amy-medium.onnx", "models/vits-piper-en_US-amy-medium/espeak-ng-data", "English", ok, err)
-                gujTts = loadFromAssets(assets, "models/guj_model", "model.onnx", "", "Gujarati", ok, err)
-                sanTts = loadFromAssets(assets, "models/san_model", "model.onnx", "", "Sanskrit", ok, err)
+                hinTts = loadPiper(File(baseDir, "vits-piper-hi_IN-rohan-medium"), "hi_IN-rohan-medium.onnx", espeakDir, "Hindi/Gujarati/Sanskrit", ok, err)
+                engTts = loadPiper(File(baseDir, "vits-piper-en_US-amy-medium"), "en_US-amy-medium.onnx", espeakDir, "English", ok, err)
 
                 isInit = ok.isNotEmpty()
                 lastStatus = if (ok.isNotEmpty()) {
-                    "તૈયાર! ચાલુ અવાજો: ${ok.joinToString(", ")}" + (if (err.isNotEmpty()) "\nનોંધ: ${err.joinToString("; ")}" else "")
+                    "તૈયાર! ચાલુ અવાજો: ${ok.joinToString(", ")}"
                 } else {
                     "એરર: ${err.joinToString(" | ")}"
                 }
@@ -168,30 +172,49 @@ class MultilingualTtsService : TextToSpeechService() {
             return lastStatus
         }
 
-        private fun loadFromAssets(assets: AssetManager, dir: String, modelName: String, dataDir: String, label: String, ok: MutableList<String>, err: MutableList<String>): OfflineTts? {
+        private fun loadPiper(dir: File, modelName: String, espeakDir: String, label: String, ok: MutableList<String>, err: MutableList<String>): OfflineTts? {
             return try {
-                val files = assets.list(dir) ?: emptyArray()
-                val actualModel = if (files.contains(modelName)) modelName else files.firstOrNull { it.endsWith(".onnx") }
-                if (actualModel == null || !files.contains("tokens.txt")) {
-                    err.add("$label નથી")
-                    return null
-                }
                 val cfg = OfflineTtsConfig(
                     model = OfflineTtsModelConfig(
                         vits = OfflineTtsVitsModelConfig(
-                            model = "$dir/$actualModel",
-                            tokens = "$dir/tokens.txt",
-                            dataDir = dataDir
+                            model = File(dir, modelName).absolutePath,
+                            tokens = File(dir, "tokens.txt").absolutePath,
+                            dataDir = espeakDir
                         ),
                         numThreads = 2
                     )
                 )
-                val tts = OfflineTts(assetManager = assets, config = cfg)
+                val tts = OfflineTts(config = cfg)
                 ok.add(label)
                 tts
             } catch (e: Throwable) {
                 err.add("$label(${e.message})")
                 null
+            }
+        }
+
+        private fun unzipAsset(context: Context, assetName: String, outDir: File) {
+            context.assets.open(assetName).use { unzipStream(it, outDir) }
+        }
+
+        private fun unzipStream(input: InputStream, outDir: File) {
+            ZipInputStream(BufferedInputStream(input)).use { zis ->
+                var entry = zis.nextEntry
+                val buf = ByteArray(8192)
+                while (entry != null) {
+                    val outFile = File(outDir, entry.name)
+                    if (entry.isDirectory) {
+                        outFile.mkdirs()
+                    } else {
+                        outFile.parentFile?.mkdirs()
+                        FileOutputStream(outFile).use { fos ->
+                            var len: Int
+                            while (zis.read(buf).also { len = it } > 0) fos.write(buf, 0, len)
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
             }
         }
 
@@ -251,8 +274,8 @@ class MultilingualTtsService : TextToSpeechService() {
 
         private fun resolveEngine(sc: String, seg: String): Pair<OfflineTts?, String> {
             return when (sc) {
-                "GUJ" -> if (gujTts != null) gujTts to seg else hinTts to gujToDevanagari(seg)
-                "DEV" -> if (sanTts != null && (seg.contains("ः") || seg.contains("॥"))) sanTts to seg else hinTts to seg
+                "GUJ" -> hinTts to gujToDevanagari(seg)
+                "DEV" -> hinTts to seg
                 else -> engTts to seg
             }
         }
@@ -338,15 +361,15 @@ android {
         applicationId "com.ai.multitts"
         minSdk 24
         targetSdk 34
-        versionCode 8
-        versionName "8.0"
+        versionCode 9
+        versionName "9.0"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = '17' }
-    aaptOptions { noCompress "onnx", "txt", "bin" }
+    aaptOptions { noCompress "onnx", "txt", "bin", "zip" }
 }
 dependencies {
     implementation files("libs/sherpa-onnx.aar")
