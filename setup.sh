@@ -128,10 +128,10 @@ cat << 'EOF' > app/src/main/java/com/ai/multitts/MultilingualTtsService.kt
 package com.ai.multitts
 
 import android.content.Context
+import android.content.res.AssetManager
 import android.media.*
 import android.speech.tts.*
 import com.k2fsa.sherpa.onnx.*
-import java.io.*
 import java.util.Locale
 
 class MultilingualTtsService : TextToSpeechService() {
@@ -147,21 +147,14 @@ class MultilingualTtsService : TextToSpeechService() {
         fun initEngine(context: Context): String {
             if (isInit && (engTts != null || hinTts != null || gujTts != null)) return lastStatus
             try {
-                val baseDir = File(context.filesDir, "models")
-                val marker = File(baseDir, ".v7")
-                if (!marker.exists()) {
-                    baseDir.deleteRecursively()
-                    copyAssets(context, "models", baseDir)
-                    marker.createNewFile()
-                }
-
+                val assets = context.assets
                 val ok = mutableListOf<String>()
                 val err = mutableListOf<String>()
 
-                hinTts = safeLoad(File(baseDir, "vits-piper-hi_IN-rohan-medium"), "hi_IN-rohan-medium.onnx", "espeak-ng-data", "Hindi", ok, err)
-                engTts = safeLoad(File(baseDir, "vits-piper-en_US-amy-medium"), "en_US-amy-medium.onnx", "espeak-ng-data", "English", ok, err)
-                gujTts = safeLoad(File(baseDir, "vits-mms-guj"), "model.onnx", "", "Gujarati", ok, err)
-                sanTts = safeLoad(File(baseDir, "vits-mms-san"), "model.onnx", "", "Sanskrit", ok, err)
+                hinTts = loadFromAssets(assets, "models/vits-piper-hi_IN-rohan-medium", "hi_IN-rohan-medium.onnx", "models/vits-piper-hi_IN-rohan-medium/espeak-ng-data", "Hindi", ok, err)
+                engTts = loadFromAssets(assets, "models/vits-piper-en_US-amy-medium", "en_US-amy-medium.onnx", "models/vits-piper-en_US-amy-medium/espeak-ng-data", "English", ok, err)
+                gujTts = loadFromAssets(assets, "models/guj_model", "model.onnx", "", "Gujarati", ok, err)
+                sanTts = loadFromAssets(assets, "models/san_model", "model.onnx", "", "Sanskrit", ok, err)
 
                 isInit = ok.isNotEmpty()
                 lastStatus = if (ok.isNotEmpty()) {
@@ -175,26 +168,25 @@ class MultilingualTtsService : TextToSpeechService() {
             return lastStatus
         }
 
-        private fun safeLoad(dir: File, modelName: String, dataDir: String, label: String, ok: MutableList<String>, err: MutableList<String>): OfflineTts? {
+        private fun loadFromAssets(assets: AssetManager, dir: String, modelName: String, dataDir: String, label: String, ok: MutableList<String>, err: MutableList<String>): OfflineTts? {
             return try {
-                val mf = File(dir, modelName)
-                val tf = File(dir, "tokens.txt")
-                if (!mf.exists() || !tf.exists()) {
-                    val found = dir.list()?.joinToString(",") ?: "empty"
-                    err.add("$label મિસિંગ($found)")
+                val files = assets.list(dir) ?: emptyArray()
+                val actualModel = if (files.contains(modelName)) modelName else files.firstOrNull { it.endsWith(".onnx") }
+                if (actualModel == null || !files.contains("tokens.txt")) {
+                    err.add("$label નથી")
                     return null
                 }
                 val cfg = OfflineTtsConfig(
                     model = OfflineTtsModelConfig(
                         vits = OfflineTtsVitsModelConfig(
-                            model = mf.absolutePath,
-                            tokens = tf.absolutePath,
-                            dataDir = if (dataDir.isNotEmpty()) File(dir, dataDir).absolutePath else ""
+                            model = "$dir/$actualModel",
+                            tokens = "$dir/tokens.txt",
+                            dataDir = dataDir
                         ),
                         numThreads = 2
                     )
                 )
-                val tts = OfflineTts(config = cfg)
+                val tts = OfflineTts(assetManager = assets, config = cfg)
                 ok.add(label)
                 tts
             } catch (e: Throwable) {
@@ -203,39 +195,13 @@ class MultilingualTtsService : TextToSpeechService() {
             }
         }
 
-        private fun copyAssets(context: Context, assetPath: String, outDir: File) {
-            val list = context.assets.list(assetPath) ?: return
-            if (list.isEmpty()) {
-                outDir.parentFile?.mkdirs()
-                context.assets.open(assetPath).use { i -> FileOutputStream(outDir).use { o -> i.copyTo(o) } }
-            } else {
-                outDir.mkdirs()
-                for (item in list) copyAssets(context, "$assetPath/$item", File(outDir, item))
-            }
-        }
-
-        private fun toRomanPhonetic(text: String): String {
-            val map = mapOf(
-                'અ' to "a", 'આ' to "aa", 'ઇ' to "i", 'ઈ' to "ee", 'ઉ' to "u", 'ઊ' to "oo",
-                'એ' to "e", 'ઐ' to "ai", 'ઓ' to "o", 'ઔ' to "au",
-                'ક' to "ka", 'ખ' to "kha", 'ગ' to "ga", 'ઘ' to "gha",
-                'ચ' to "cha", 'છ' to "chha", 'જ' to "ja", 'ઝ' to "jha",
-                'ટ' to "ta", 'ઠ' to "tha", 'ડ' to "da", 'ઢ' to "dha", 'ણ' to "na",
-                'ત' to "ta", 'થ' to "tha", 'દ' to "da", 'ધ' to "dha", 'ન' to "na",
-                'પ' to "pa", 'ફ' to "pha", 'બ' to "ba", 'ભ' to "bha", 'મ' to "ma",
-                'ય' to "ya", 'ર' to "ra", 'લ' to "la", 'વ' to "va",
-                'શ' to "sha", 'ષ' to "sha", 'સ' to "sa", 'હ' to "ha", 'ળ' to "la",
-                'ા' to "aa", 'િ' to "i", 'ી' to "ee", 'ુ' to "u", 'ૂ' to "oo",
-                'ે' to "e", 'ૈ' to "ai", 'ો' to "o", 'ૌ' to "au", 'ં' to "n", 'ઃ' to "h", '્' to ""
-            )
+        private fun gujToDevanagari(text: String): String {
             val sb = StringBuilder()
             for (ch in text) {
-                val mapped = map[ch]
-                if (mapped != null) sb.append(mapped)
-                else if (ch in '\u0900'..'\u097F') sb.append(map[(ch.code - 0x0900 + 0x0A80).toChar()] ?: ch)
+                if (ch in '\u0A81'..'\u0AF9') sb.append((ch.code - 0x0A80 + 0x0900).toChar())
                 else sb.append(ch)
             }
-            return sb.toString().lowercase()
+            return sb.toString()
         }
 
         fun splitByScript(text: String): List<Pair<String, String>> {
@@ -285,8 +251,8 @@ class MultilingualTtsService : TextToSpeechService() {
 
         private fun resolveEngine(sc: String, seg: String): Pair<OfflineTts?, String> {
             return when (sc) {
-                "GUJ" -> if (gujTts != null) gujTts to toRomanPhonetic(seg) else hinTts to seg
-                "DEV" -> if (sanTts != null && (seg.contains("ः") || seg.contains("॥"))) sanTts to toRomanPhonetic(seg) else hinTts to seg
+                "GUJ" -> if (gujTts != null) gujTts to seg else hinTts to gujToDevanagari(seg)
+                "DEV" -> if (sanTts != null && (seg.contains("ः") || seg.contains("॥"))) sanTts to seg else hinTts to seg
                 else -> engTts to seg
             }
         }
@@ -372,8 +338,8 @@ android {
         applicationId "com.ai.multitts"
         minSdk 24
         targetSdk 34
-        versionCode 7
-        versionName "7.0"
+        versionCode 8
+        versionName "8.0"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
