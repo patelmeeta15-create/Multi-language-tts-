@@ -37,9 +37,7 @@ jobs:
           unzip -q /tmp/gradle-8.5.zip -d /tmp
           /tmp/gradle-8.5/bin/gradle wrapper --gradle-version 8.5
 
-      - name: Download & Verify Offline AI Models
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download & Pack Offline AI Models
         run: |
           mkdir -p app/src/main/assets/models
           cd app/src/main/assets/models
@@ -47,20 +45,14 @@ jobs:
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2 && tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
 
-          MODELS_JSON=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases/tags/tts-models")
-          GUJ_URL=$(echo "$MODELS_JSON" | grep -o 'https://[^"]*gu[^"]*\.tar\.bz2' | head -n 1)
-          SAN_URL=$(echo "$MODELS_JSON" | grep -o 'https://[^"]*san[^"]*\.tar\.bz2' | head -n 1)
-          echo "GUJ_URL=$GUJ_URL"
-          echo "SAN_URL=$SAN_URL"
+          # Pack espeak-ng-data cleanly into zip so Android never drops sub-files
+          cd vits-piper-hi_IN-rohan-medium && zip -qr ../espeak-ng-data.zip espeak-ng-data && rm -rf espeak-ng-data && cd ..
+          rm -rf vits-piper-en_US-amy-medium/espeak-ng-data
 
-          if [ -n "$GUJ_URL" ]; then
-            wget -q "$GUJ_URL" -O guj.tar.bz2 && mkdir -p guj_model && tar -xjf guj.tar.bz2 -C guj_model --strip-components=1 && rm guj.tar.bz2
-          fi
-          if [ -n "$SAN_URL" ]; then
-            wget -q "$SAN_URL" -O san.tar.bz2 && mkdir -p san_model && tar -xjf san.tar.bz2 -C san_model --strip-components=1 && rm san.tar.bz2
-          fi
-
-          ls -la
+          # Pack all models into single models.zip for 100% lossless extraction
+          zip -qr ../models.zip .
+          cd .. && rm -rf models
+          ls -lh models.zip
 
       - name: Build Debug APK
         run: |
