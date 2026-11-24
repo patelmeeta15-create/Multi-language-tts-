@@ -32,7 +32,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.widget.*
-import java.util.Locale
 
 class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -139,7 +138,7 @@ class MultilingualTtsService : TextToSpeechService() {
         fun initEngine(context: Context): String {
             if (isInit && (engTts != null || hinTts != null)) return lastStatus
             try {
-                val baseDir = File(context.filesDir, "tts_v9")
+                val baseDir = File(context.filesDir, "tts_v10")
                 val marker = File(baseDir, ".ready")
                 if (!marker.exists()) {
                     baseDir.deleteRecursively()
@@ -157,12 +156,12 @@ class MultilingualTtsService : TextToSpeechService() {
                 val ok = mutableListOf<String>()
                 val err = mutableListOf<String>()
 
-                hinTts = loadPiper(File(baseDir, "vits-piper-hi_IN-rohan-medium"), "hi_IN-rohan-medium.onnx", espeakDir, "Hindi/Gujarati/Sanskrit", ok, err)
+                hinTts = loadPiper(File(baseDir, "vits-piper-hi_IN-rohan-medium"), "hi_IN-rohan-medium.onnx", espeakDir, "Hindi/Guj/San", ok, err)
                 engTts = loadPiper(File(baseDir, "vits-piper-en_US-amy-medium"), "en_US-amy-medium.onnx", espeakDir, "English", ok, err)
 
                 isInit = ok.isNotEmpty()
                 lastStatus = if (ok.isNotEmpty()) {
-                    "તૈયાર! ચાલુ અવાજો: ${ok.joinToString(", ")}"
+                    "તૈયાર! ${ok.joinToString(", ")}"
                 } else {
                     "એરર: ${err.joinToString(" | ")}"
                 }
@@ -179,13 +178,18 @@ class MultilingualTtsService : TextToSpeechService() {
                         vits = OfflineTtsVitsModelConfig(
                             model = File(dir, modelName).absolutePath,
                             tokens = File(dir, "tokens.txt").absolutePath,
-                            dataDir = espeakDir
+                            dataDir = espeakDir,
+                            noiseScale = 0.667f,
+                            noiseScaleW = 0.8f,
+                            lengthScale = 1.0f
                         ),
-                        numThreads = 2
+                        numThreads = 2,
+                        debug = false,
+                        provider = "cpu"
                     )
                 )
                 val tts = OfflineTts(config = cfg)
-                ok.add(label)
+                ok.add("$label(SR=${tts.sampleRate()})")
                 tts
             } catch (e: Throwable) {
                 err.add("$label(${e.message})")
@@ -361,8 +365,8 @@ android {
         applicationId "com.ai.multitts"
         minSdk 24
         targetSdk 34
-        versionCode 9
-        versionName "9.0"
+        versionCode 10
+        versionName "10.0"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
