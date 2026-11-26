@@ -17,22 +17,13 @@ jobs:
           distribution: 'temurin'
 
       - name: Run App Setup Script & Download Sherpa-ONNX
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f "Setup.sh" ]; then mv Setup.sh setup.sh; fi
           chmod +x setup.sh
           ./setup.sh
 
           mkdir -p app/libs
-          # Find standard (non-rknn) Android AAR from sherpa-onnx releases
-          AAR_URL=""
-          for p in 1 2 3 4 5 6 7 8 9 10; do
-            AAR_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=100&page=$p" | grep -o 'https://[^"]*sherpa-onnx-[0-9][^"]*\.aar' | grep -v 'rknn' | head -n 1)
-            if [ -n "$AAR_URL" ]; then break; fi
-          done
-          echo "Found AAR URL: $AAR_URL"
-          wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.30/sherpa-onnx-1.10.30.aar -O app/libs/sherpa-onnx.aar
           ls -lh app/libs/sherpa-onnx.aar
 
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle-8.5.zip
@@ -45,10 +36,10 @@ jobs:
           cd app/src/main/assets/models
 
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-rohan-medium.tar.bz2 && tar -xjf vits-piper-hi_IN-rohan-medium.tar.bz2 && rm vits-piper-hi_IN-rohan-medium.tar.bz2
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-medium.tar.bz2 && tar -xjf vits-piper-en_US-amy-medium.tar.bz2 && rm vits-piper-en_US-amy-medium.tar.bz2
+          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2 && tar -xjf vits-piper-en_US-lessac-medium.tar.bz2 && rm vits-piper-en_US-lessac-medium.tar.bz2
 
           cd vits-piper-hi_IN-rohan-medium && zip -qr ../espeak-ng-data.zip espeak-ng-data && rm -rf espeak-ng-data && cd ..
-          rm -rf vits-piper-en_US-amy-medium/espeak-ng-data
+          rm -rf vits-piper-en_US-lessac-medium/espeak-ng-data
 
           zip -qr ../models.zip .
           cd .. && rm -rf models
