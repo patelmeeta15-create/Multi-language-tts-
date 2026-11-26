@@ -138,7 +138,7 @@ class MultilingualTtsService : TextToSpeechService() {
         fun initEngine(context: Context): String {
             if (isInit && (engTts != null || hinTts != null)) return lastStatus
             try {
-                val baseDir = File(context.filesDir, "tts_v10")
+                val baseDir = File(context.filesDir, "tts_v11")
                 val marker = File(baseDir, ".ready")
                 if (!marker.exists()) {
                     baseDir.deleteRecursively()
@@ -157,7 +157,7 @@ class MultilingualTtsService : TextToSpeechService() {
                 val err = mutableListOf<String>()
 
                 hinTts = loadPiper(File(baseDir, "vits-piper-hi_IN-rohan-medium"), "hi_IN-rohan-medium.onnx", espeakDir, "Hindi/Guj/San", ok, err)
-                engTts = loadPiper(File(baseDir, "vits-piper-en_US-amy-medium"), "en_US-amy-medium.onnx", espeakDir, "English", ok, err)
+                engTts = loadPiper(File(baseDir, "vits-piper-en_US-lessac-medium"), "en_US-lessac-medium.onnx", espeakDir, "English", ok, err)
 
                 isInit = ok.isNotEmpty()
                 lastStatus = if (ok.isNotEmpty()) {
@@ -184,7 +184,7 @@ class MultilingualTtsService : TextToSpeechService() {
                             lengthScale = 1.0f
                         ),
                         numThreads = 2,
-                        debug = false,
+                        debug = true,
                         provider = "cpu"
                     )
                 )
@@ -365,8 +365,8 @@ android {
         applicationId "com.ai.multitts"
         minSdk 24
         targetSdk 34
-        versionCode 10
-        versionName "10.0"
+        versionCode 11
+        versionName "11.0"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
