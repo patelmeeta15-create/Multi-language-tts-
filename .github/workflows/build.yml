@@ -17,13 +17,27 @@ jobs:
           distribution: 'temurin'
 
       - name: Run App Setup Script & Download Sherpa-ONNX
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f "Setup.sh" ]; then mv Setup.sh setup.sh; fi
           chmod +x setup.sh
           ./setup.sh
 
           mkdir -p app/libs
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.30/sherpa-onnx-1.10.30.aar -O app/libs/sherpa-onnx.aar
+          AAR_URL=""
+          for p in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            AAR_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=100&page=$p" | grep -o 'https://[^"]*sherpa-onnx-1\.1[01][^"]*\.aar' | grep -v 'rknn' | head -n 1)
+            if [ -n "$AAR_URL" ]; then break; fi
+          done
+          if [ -z "$AAR_URL" ]; then
+            for p in 1 2 3 4 5; do
+              AAR_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/k2-fsa/sherpa-onnx/releases?per_page=100&page=$p" | grep -o 'https://[^"]*sherpa-onnx-[^"]*\.aar' | grep -v 'rknn' | tail -n 1)
+              if [ -n "$AAR_URL" ]; then break; fi
+            done
+          fi
+          echo "Found AAR URL: $AAR_URL"
+          wget -q "$AAR_URL" -O app/libs/sherpa-onnx.aar
           ls -lh app/libs/sherpa-onnx.aar
 
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/gradle-8.5.zip
